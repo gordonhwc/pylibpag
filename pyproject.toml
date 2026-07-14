@@ -1,0 +1,35 @@
+[build-system]
+requires = ["scikit-build-core>=1.0.3,<2"]
+build-backend = "scikit_build_core.build"
+
+[project]
+name = "pylibpag"
+version = "4.5.75"
+description = "Lightweight unofficial Python bindings for Tencent libpag, focused on encoding WebP frame sequences and embedding audio into PAG files."
+readme = "README.md"
+requires-python = ">=3.14"
+license = "Apache-2.0"
+license-files = ["LICENSE.txt"]
+keywords = ["animation", "libpag", "pag", "webp"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Operating System :: POSIX :: Linux",
+    "Programming Language :: C++",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.14",
+    "Topic :: Multimedia :: Graphics",
+]
+
+[project.urls]
+Homepage = "https://github.com/gordonhwc/pylibpag"
+Repository = "https://github.com/gordonhwc/pylibpag"
+Upstream = "https://github.com/Tencent/libpag"
+
+[tool.scikit-build]
+minimum-version = "build-system.requires"
+cmake.source-dir = "python"
+cmake.build-type = "Release"
+wheel.packages = ["python/src/pylibpag"]
+wheel.py-api = "py3"
+wheel.platlib = true
+install.strip = true

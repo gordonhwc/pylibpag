@@ -1,303 +1,184 @@
-<img src="resources/readme/logo.png" alt="PAG Logo" width="553"/>
+<p align="center"><a href="https://github.com/Tencent/libpag"><img src="https://media.githubusercontent.com/media/Tencent/libpag/main/resources/readme/logo.png" alt="PAG logo" width="420"></a></p>
 
-[![license](https://img.shields.io/badge/license-Apache%202-blue)](https://github.com/Tencent/libpag/blob/master/LICENSE.txt) 
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/Tencent/libpag/pulls) 
-[![codecov](https://codecov.io/gh/Tencent/libpag/branch/main/graph/badge.svg)](https://codecov.io/gh/Tencent/libpag)
-[![autotest](https://github.com/Tencent/libpag/actions/workflows/autotest.yml/badge.svg?branch=main)](https://github.com/Tencent/libpag/actions/workflows/autotest.yml)
-[![build](https://github.com/Tencent/libpag/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/Tencent/libpag/actions/workflows/build.yml)
-[![GitHub release (latest SemVer)](https://img.shields.io/github/v/release/Tencent/libpag)](https://github.com/Tencent/libpag/releases)
+# pylibpag
 
+[![CPython](https://img.shields.io/badge/CPython-3.14%20%7C%203.14t-3776AB?logo=python&logoColor=white)](pyproject.toml) [![Linux](https://img.shields.io/badge/Linux-amd64-FCC624?logo=linux&logoColor=black)](#building-the-wheel) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.txt)
 
-[![Cloud Studio](https://cs-res.codehub.cn/common/assets/icon-badge.svg)](https://cloudstudio.net/a/20987965736472576?channel=share&sharetype=Markdown)
+Lightweight unofficial Python bindings for [Tencent libpag](https://github.com/Tencent/libpag), focused on encoding WebP
+frame sequences and embedding audio into PAG files.
 
-English | [简体中文](./README.zh_CN.md) | [Homepage](https://pag.io)
+This repository is a source fork of the official libpag project. The Python layer is kept in the separate `python/`
+directory so upstream libpag updates can be rebased without modifying its existing source files.
 
-## Introduction
+> This is an unofficial project and is not affiliated with or endorsed by Tencent.
 
-libpag is a real-time rendering library for PAG (Portable Animated Graphics) files, capable of 
-rendering both vector-based and raster-based animations across various platforms, including iOS, 
-Android, OpenHarmony, macOS, Windows, Linux, and the Web.
+## Features
 
-PAG is an open-source file format designed for recording animations. You can create and export PAG 
-files from Adobe After Effects using the PAGExporter plugin and preview them in the PAGViewer app, 
-both available on macOS and Windows.
+- Encode one or more already-encoded WebP frames into a bitmap PAG animation
+- Preserve WebP alpha data for transparent animations
+- Optionally embed AAC audio stored in an MPEG-4 container, normally M4A bytes
+- Run independent encode calls concurrently from Python threads without a global conversion lock
+- Use one native wheel on both regular CPython 3.14 and free-threaded CPython 3.14t
+- Avoid a CPython extension ABI by exposing a small C interface through `ctypes.CDLL`
 
-PAG is widely used in major Tencent apps like WeChat, Mobile QQ, Honor of Kings, Tencent Video, and 
-QQ Music, as well as in thousands of third-party apps, reaching hundreds of millions of users.
+The initial wheel target is Linux amd64 using the `manylinux_2_28_x86_64` platform tag.
 
-## Advantages
+## Installation
 
-- **Highly efficient file format**
+After a release is published:
 
-<img src="resources/readme/intro_1.png" alt="intro_1" width="282"/>
-
-Benefiting from its highly efficient binary format, PAG files decode 10 times faster than JSON files 
-and are about 50% smaller in file size for the same animations. Designers can also easily include 
-beautiful animations with bitmaps or audiovisual media in a single file without needing additional 
-attachments.
-
-- **All AE features supported**
-
-<img src="resources/readme/intro_2.png" alt="intro_2" width="282"/>
-
-While other solutions may only support exporting limited vector-based AE features, PAG combines 
-vector-based and raster-based exporting techniques to support all AE animations in a single file. 
-This means third-party plugin effects in AE can also be exported.
-
-- **Measurable performance**
-
-<img src="resources/readme/intro_4.png" alt="intro_4" width="282"/>
-
-PAG provides a monitoring panel in PAGViewer that displays normalized performance data for PAG files,
-making it easy for designers to review and optimize performance without needing developers. With 
-numerous automatic optimization techniques from the PAGExporter plugin, you can create animations 
-with impressive visual effects and excellent performance more efficiently.
-
-
-PAGViewer includes a monitoring panel 
-- **Runtime editable animations**
-
-<img src="resources/readme/intro_5.png" alt="intro_5" width="282"/>
-
-With the flexible editing APIs from the PAG SDK, developers can easily modify the layer structure of
-a single PAG file, combine multiple PAG files into one composition, or replace text and images with 
-all pre-designed animation effects applied at runtime. This significantly reduces the coding work 
-required for features like video templates.
-
-## System Requirements
-
-- iOS 9.0+
-- Android 5.0+
-- HarmonyOS Next 5.0.0(12)+
-- macOS 10.15+
-- Windows 7.0+
-- Chrome 69.0+ (Web)
-- Safari 11.3+ (Web)
-
-## Getting Started
-
-We currently only publish precompiled libraries for iOS, Android, macOS, Web, and OpenHarmony. You 
-can build libraries of other platforms from the source code. The latest releases can be downloaded
-from [here](https://github.com/Tencent/libpag/releases).
-
-### iOS Integration
-
-You can download the framework from the release page or add `libpag` to your project using CocoaPods.
-To add the pod to your Podfile, include:
-
-```
-pod 'libpag'
+```bash
+python -m pip install pylibpag
 ```
 
-And then run:
+To install a locally built wheel:
 
-```
-pod install
-```
-
-After installing the CocoaPod, import `libpag` into your project with:
-
-```
-#import <libpag/xxx.h>
+```bash
+python -m pip install dist/pylibpag-*.whl
 ```
 
-### Android Integration
+Python 3.14 or newer is required.
 
-You can download the AAR from the release page or add `libpag` to your project using Maven:
+## Usage
 
-Edit the `build.gradle` file in the root of your project and add `mavenCentral()` to the `repositories` section:
+```python
+from pathlib import Path
 
-```
-buildscript {
-    repositories {
-        mavenCentral()
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:3.2.1'
-    }
-}
-```
+import pylibpag
 
-Add libpag to `app/build.gradle` (*`4.0.5.10` should be replaced with the latest release version*):
+frames = [
+    Path("frame-001.webp").read_bytes(),
+    Path("frame-002.webp").read_bytes(),
+]
 
-```
-dependencies {
-    implementation 'com.tencent.tav:libpag:4.0.5.10'
-}
+pag_bytes = pylibpag.encode_webp_frames(
+    frames,
+    width=512,
+    height=512,
+    frame_rate=30.0,
+)
+Path("animation.pag").write_bytes(pag_bytes)
 ```
 
-Add the following rule to your proguard rules to prevent incorrect obfuscation:
+### Transparent frames
 
-```
-  -keep class org.libpag.** {*;}
-  -keep class androidx.exifinterface.** {*;}
-```
+Pass WebP frames that already contain alpha. `pylibpag` stores the encoded frame bytes in a PAG bitmap sequence; it does
+not decode, resize, or otherwise convert the source images.
 
-Finally, run gradle sync and build your project.
+### Audio
 
-### OpenHarmony Integration
+libpag expects composition audio to be AAC in an MPEG-4 container. An M4A file can be passed directly as bytes:
 
-You can download the HAR file from the [release](https://github.com/Tencent/libpag/releases) page, 
-or add `libpag` to your project using OHPM:
-
-```
-ohpm install @tencent/libpag
-```
-
-Alternatively, you can add it to your project manually. Add the following lines to `oh-package.json5` 
-in your app module.
-
-```
-"dependencies": {
-"@tencent/libpag": "^1.0.1",
-}
+```python
+pag_bytes = pylibpag.encode_webp_frames(
+    frames,
+    width=512,
+    height=512,
+    frame_rate=30.0,
+    audio=Path("audio.m4a").read_bytes(),
+    audio_start_frame=0,
+)
 ```
 
-Then run:
+The native layer embeds audio bytes without transcoding or validating the codec. Convert MP3, WAV, PCM, raw AAC, or
+other inputs to AAC-in-MP4 in your Python media pipeline first. Embedded audio does not automatically extend the visual
+frame duration.
 
+### Threading
+
+Independent calls can run concurrently:
+
+```python
+from concurrent.futures import ThreadPoolExecutor
+
+with ThreadPoolExecutor(max_workers=8) as executor:
+    pag_files = list(
+        executor.map(
+            lambda frame_group: pylibpag.encode_webp_frames(
+                frame_group,
+                width=512,
+                height=512,
+            ),
+            frame_groups,
+        )
+    )
 ```
-ohpm install
+
+Each call creates its own libpag composition, frame objects, input copies, error state, and output buffer. Do not share
+or mutate an input buffer while a call is using it.
+
+## API
+
+```python
+pylibpag.encode_webp_frames(
+    frames,
+    *,
+    width,
+    height,
+    frame_rate=30.0,
+    audio=None,
+    audio_start_frame=0,
+) -> bytes
 ```
 
-### Web Integration
+- `frames`: ordered iterable of encoded WebP buffers
+- `width` and `height`: positive composition dimensions
+- `frame_rate`: finite positive frames per second
+- `audio`: optional AAC-in-MP4/M4A buffer
+- `audio_start_frame`: signed frame offset for the first audio frame
 
-Copy the following code into an HTML file and open it in your browser:
+Native encode failures raise `pylibpag.PAGEncodeError`.
 
-```html
-<canvas class="canvas" id="pag"></canvas>
-<script src="https://unpkg.com/libpag@latest/lib/libpag.min.js"></script>
-<script>
-  window.libpag.PAGInit().then((PAG) => {
-    const url = 'https://pag.io/file/like.pag';
-    fetch(url)
-      .then((response) => response.blob())
-      .then(async (blob) => {
-        const file = new window.File([blob], url.replace(/(.*\/)*([^.]+)/i, '$2'));
-        // Do Something.
-      });
-  });
-</script>
+## Building the wheel
+
+Docker is the only local build requirement:
+
+```bash
+python3 scripts/build_wheel.py
 ```
-More information：[Web SDK Guide](./web/README.md)
 
+The script:
 
-### Example
+1. Starts the official PyPA manylinux amd64 image with `docker run --rm`
+2. Mounts this repository read-only and copies it into the temporary container
+3. Synchronizes the exact libpag dependencies declared by `DEPS`
+4. Builds a modern PEP 517 wheel with scikit-build-core
+5. Repairs the platform tag and bundled libraries with auditwheel
+6. Installs and tests the same wheel using regular CPython 3.14 and free-threaded CPython 3.14t
+7. Writes the final wheel to `dist/`
 
-Explore these projects to learn how to use the libpag APIs:
+All dependency and compiler files remain inside the disposable container. Only the wheel in `dist/` is retained.
 
-- [https://github.com/libpag/pag-ios](https://github.com/libpag/pag-ios)
-- [https://github.com/libpag/pag-android](https://github.com/libpag/pag-android)
-- [https://github.com/libpag/pag-web](https://github.com/libpag/pag-web)
+## Scope
 
-### Documentation
-
-- [iOS API Reference](https://pag.io/apis/ios/index.html)
-- [Android API Reference](https://pag.io/apis/android/index.html)
-- [Web API Reference](https://pag.io/apis/web/index.html)
-
-You can find additional documentation on [pag.io](https://pag.io/docs/home.html)
+`pylibpag` deliberately does not provide media conversion or PAG playback. Convert PNG, video, APNG, or other source
+formats to WebP frames in Python, then pass those bytes to this package. This keeps the compiled binding small and the
+upstream integration easy to maintain.
 
 ## Development
 
-We recommend using the CLion IDE on macOS for development.
+For upstream libpag SDK development and platform build instructions, see the
+official [libpag development guide](https://github.com/Tencent/libpag#development). Python wheel development is
+described in [Building the wheel](#building-the-wheel).
 
-### Branch Management
+## Updating libpag
 
-- The `main` branch is our active development branch, containing the latest features and bug fixes.
-- The `release/` branches are our stable milestone branches, fully tested. We periodically create a
-  `release/{version}` branch from the `main` branch. After a `release/{version}` branch is created, 
-  only high-priority fixes are checked into it.
+Add the official repository as an upstream remote once:
 
-**Note: This repository only contains the latest code since PAG 4.0. For legacy PAG 3.0 versions, 
-you can download the precompiled libraries from [here](https://github.com/Tencent/libpag/releases).**
-
-### Build Prerequisites
-
-- Xcode 11.0+
-- GCC 9.0+
-- Visual Studio 2019+
-- NodeJS 14.14.0+
-- Ninja 1.9.0+
-- CMake 3.13.0+
-- QT 6.2.0+
-- NDK 28+ (**28.0.13004108 recommended**)
-- Emscripten 3.1.58+
-
-### Dependency Management
-
-libpag uses the [depsync](https://github.com/domchen/depsync) tool to manage third-party dependencies.
-
-**For macOS platform：**
-
-Run the script located in the root directory of the project:
-
-```
-./sync_deps.sh
+```bash
+git remote add upstream https://github.com/Tencent/libpag.git
 ```
 
-This script will automatically install the necessary tools and sync all third-party repositories.
+Then rebase this package layer onto a newer libpag revision:
 
-**For other platforms：**
-
-First, ensure you have the latest version of Node.js installed (you may need to restart your 
-computer afterward). Then, run the following command to install the depsync tool:
-
-```
-npm install -g depsync
+```bash
+git fetch upstream
+git rebase upstream/main
 ```
 
-Then, run `depsync` in the root directory of the project.
-
-```
-depsync
-```
-
-You might need to enter your Git account and password during synchronization. Ensure you have 
-enabled the `git-credential-store` so that `CMakeList.txt` can automatically trigger synchronization 
-next time.
-
-### Build
-
-After synchronization, you can open the project with CLion and build the PAG library.
-
-**For macOS:**
-
-No additional CLion configuration is needed.
-
-**For Windows:**
-
-Follow these steps to configure CLion correctly:
-
-- Ensure you have installed the **[Desktop development with C++]** and **[Universal Windows Platform development]** components for VS2019.
-- Open the **File->Settings** panel, go to **Build, Execution, Deployment->Toolchains**, and set the toolchain to **Visual Studio** with **amd64 (Recommended)** or **x86** architecture.
-
-**Note: If you encounter issues during the CMake build, update to the latest version of the CMake 
-command-line tool and try again.**
-
-## Support Us
-
-If you find libpag helpful, please give us a **Star**. We truly appreciate your support :)
-
-
-[![Star History Chart](https://api.star-history.com/svg?repos=Tencent/libpag&type=Date)](https://star-history.com/#Tencent/libpag&Date)
-
+After each upstream update, rebuild the wheel and rerun the included 3.14t concurrency test.
 
 ## License
 
-libpag is licensed under the [Apache Version 2.0 License](./LICENSE.txt)
-
-The copyright notice pertaining to the Tencent code in this repo was previously in the name of "THL
-A29 Limited". That entity has now been de-registered. You should treat all previously distributed
-copies of the code as if the copyright notice was in the name of "Tencent".
-
-## Privacy Policy
-
-Please refer to the [PAG SDK Personal Information Processing Rules](https://privacy.qq.com/document/preview/01e79d0cc7a2427ba774b88c6beff0fd) when using the libpag SDK.
-
-## Contribution
-
-If you have any ideas or suggestions to improve libpag, feel free to submit an
-[issue](https://github.com/Tencent/libpag/issues/new/choose) or a [pull request](https://github.com/Tencent/libpag/pulls). 
-Before doing so, please read our [Contributing Guide](./CONTRIBUTING.md).
-
-
+Licensed under the [Apache License 2.0](LICENSE.txt). libpag is developed by Tencent. This unofficial Python package
+preserves the upstream license and attribution.
