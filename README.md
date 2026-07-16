@@ -161,33 +161,6 @@ For upstream libpag SDK development and platform build instructions, see the
 official [libpag development guide](https://github.com/Tencent/libpag#development). Python wheel development is
 described in [Building the wheel](#building-the-wheel).
 
-### Publishing to PyPI
-
-1. Set the release version in `pyproject.toml` and commit the release changes.
-2. Create a tag named `pylibpag-v<version>` on that commit.
-3. Create a GitHub release from the tag and publish it.
-4. Wait for the `Publish to PyPI` workflow to build, test, and publish the wheel.
-
-The workflow rejects tags that do not match the version in `pyproject.toml`. The release tag must point to a commit
-containing `.github/workflows/release.yml`.
-
-## Updating libpag
-
-Add the official repository as an upstream remote once:
-
-```bash
-git remote add upstream https://github.com/Tencent/libpag.git
-```
-
-Then rebase this package layer onto a newer libpag revision:
-
-```bash
-git fetch upstream
-git rebase upstream/main
-```
-
-After each upstream update, rebuild the wheel and rerun the included 3.14t concurrency test.
-
 ## License
 
 Licensed under the [Apache License 2.0](LICENSE.txt). libpag is developed by Tencent. This unofficial Python package
