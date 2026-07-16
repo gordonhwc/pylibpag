@@ -13,6 +13,7 @@ CONTAINER_SCRIPT = r"""
 set -euo pipefail
 
 cp --archive /src/. /work/
+rm --recursive --force /work/.git
 dnf module install --assumeyes nodejs:24/common
 npm install --global depsync@1.4.6
 
