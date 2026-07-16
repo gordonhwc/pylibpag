@@ -25,7 +25,7 @@ The initial wheel target is Linux amd64 using the `manylinux_2_28_x86_64` platfo
 
 ## Installation
 
-After a release is published:
+Install from PyPI:
 
 ```bash
 python -m pip install pylibpag
