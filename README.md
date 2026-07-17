@@ -2,7 +2,7 @@
 
 # pylibpag
 
-[![CPython](https://img.shields.io/badge/CPython-3.14%20%7C%203.14t-3776AB?logo=python&logoColor=white)](pyproject.toml) [![Linux](https://img.shields.io/badge/Linux-amd64-FCC624?logo=linux&logoColor=black)](#building-the-wheel) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.txt)
+[![CPython](https://img.shields.io/badge/CPython-3.14%20%7C%203.14t-3776AB?logo=python&logoColor=white)](pyproject.toml) [![Linux](https://img.shields.io/badge/Linux-amd64%20%7C%20arm64-FCC624?logo=linux&logoColor=black)](#platform-support) [![macOS](https://img.shields.io/badge/macOS-arm64-000000?logo=apple&logoColor=white)](#platform-support) [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE.txt)
 
 Lightweight unofficial Python bindings for [Tencent libpag](https://github.com/Tencent/libpag), focused on encoding WebP
 frame sequences and embedding audio into PAG files.
@@ -18,10 +18,8 @@ directory so upstream libpag updates can be rebased without modifying its existi
 - Preserve WebP alpha data for transparent animations
 - Optionally embed AAC audio stored in an MPEG-4 container, normally M4A bytes
 - Run independent encode calls concurrently from Python threads without a global conversion lock
-- Use one native wheel on both regular CPython 3.14 and free-threaded CPython 3.14t
+- Use one native wheel per platform on both regular CPython 3.14 and free-threaded CPython 3.14t
 - Avoid a CPython extension ABI by exposing a small C interface through `ctypes.CDLL`
-
-The initial wheel target is Linux amd64 using the `manylinux_2_28_x86_64` platform tag.
 
 ## Installation
 
@@ -29,12 +27,6 @@ Install from PyPI:
 
 ```bash
 python -m pip install pylibpag
-```
-
-To install a locally built wheel:
-
-```bash
-python -m pip install dist/pylibpag-*.whl
 ```
 
 Python 3.14 or newer is required.
@@ -129,25 +121,16 @@ pylibpag.encode_webp_frames(
 
 Native encode failures raise `pylibpag.PAGEncodeError`.
 
-## Building the wheel
+## Platform support
 
-Docker is the only local build requirement:
+Prebuilt wheels are provided for:
 
-```bash
-python3 scripts/build_wheel.py
-```
+- Linux amd64 using the `manylinux_2_28` build policy
+- Linux arm64 using the `manylinux_2_28` build policy
+- macOS arm64 with a macOS 11.0 deployment target
 
-The script:
-
-1. Starts the official PyPA manylinux amd64 image with `docker run --rm`
-2. Mounts this repository read-only and copies it into the temporary container
-3. Synchronizes the exact libpag dependencies declared by `DEPS`
-4. Builds a modern PEP 517 wheel with scikit-build-core
-5. Repairs the platform tag and bundled libraries with auditwheel
-6. Installs and tests the same wheel using regular CPython 3.14 and free-threaded CPython 3.14t
-7. Writes the final wheel to `dist/`
-
-All dependency and compiler files remain inside the disposable container. Only the wheel in `dist/` is retained.
+A single wheel per platform supports both regular CPython 3.14 and free-threaded CPython 3.14t, and is tested with both
+runtimes.
 
 ## Scope
 
@@ -158,8 +141,8 @@ upstream integration easy to maintain.
 ## Development
 
 For upstream libpag SDK development and platform build instructions, see the
-official [libpag development guide](https://github.com/Tencent/libpag#development). Python wheel development is
-described in [Building the wheel](#building-the-wheel).
+official [libpag development guide](https://github.com/Tencent/libpag#development). Python wheel builds and tests are
+defined in the [GitHub Actions workflow](.github/workflows/release.yml).
 
 ## License
 

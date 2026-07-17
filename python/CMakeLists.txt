@@ -3,7 +3,7 @@ project(pylibpag LANGUAGES C CXX)
 
 set(PYLIBPAG_ROOT "${CMAKE_CURRENT_LIST_DIR}/..")
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstdint")
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -include cstddef -include cstdint")
 
 set(PAG_BUILD_SHARED OFF CACHE BOOL "" FORCE)
 set(PAG_BUILD_FRAMEWORK OFF CACHE BOOL "" FORCE)
@@ -22,12 +22,22 @@ set(PAG_USE_JPEG_ENCODE OFF CACHE BOOL "" FORCE)
 set(PAG_USE_WEBP_DECODE ON CACHE BOOL "" FORCE)
 set(PAG_USE_WEBP_ENCODE OFF CACHE BOOL "" FORCE)
 set(PAG_USE_OPENGL ON CACHE BOOL "" FORCE)
-set(PAG_USE_SWIFTSHADER ON CACHE BOOL "" FORCE)
 set(PAG_USE_THREADS ON CACHE BOOL "" FORCE)
+
+if (APPLE)
+    set(PAG_USE_SWIFTSHADER OFF CACHE BOOL "" FORCE)
+else ()
+    set(PAG_USE_SWIFTSHADER ON CACHE BOOL "" FORCE)
+endif ()
 
 add_subdirectory("${PYLIBPAG_ROOT}" "${CMAKE_CURRENT_BINARY_DIR}/libpag" EXCLUDE_FROM_ALL)
 
-add_library(pylibpag_native SHARED native/pylibpag.cpp)
+if (CMAKE_SYSTEM_NAME STREQUAL "Linux" AND CMAKE_SYSTEM_PROCESSOR MATCHES "^(aarch64|arm64)$")
+    # tgfx's fixed-size SIMD buffers are incompatible with Highway's SVE targets
+    target_compile_definitions(tgfx PRIVATE HWY_DISABLED_TARGETS=HWY_ALL_SVE)
+endif ()
+
+add_library(pylibpag_native MODULE native/pylibpag.cpp)
 target_compile_features(pylibpag_native PRIVATE cxx_std_17)
 target_include_directories(pylibpag_native PRIVATE "${PYLIBPAG_ROOT}/include")
 target_link_libraries(pylibpag_native PRIVATE pag)
