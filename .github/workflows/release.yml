@@ -80,6 +80,8 @@ jobs:
       - name: Build wheel
         run: |
           npm install --global depsync@1.4.6
+
+          # The .git directory can cause ownership errors and an unnecessary LFS sync during depsync
           rm -rf .git
           depsync
 
@@ -152,8 +154,11 @@ jobs:
           MACOSX_DEPLOYMENT_TARGET: "11.0"
         run: |
           npm install --global depsync@1.4.6
+
+          # The .git directory can cause ownership errors and an unnecessary LFS sync during depsync
           rm -rf .git
           depsync
+
           python -m pip install \
               --disable-pip-version-check \
               build==1.5.0 \
