@@ -27,6 +27,7 @@
 #import "PAGFile.h"
 #import "platform/cocoa/PAGDiskCache.h"
 #import "platform/cocoa/private/PAGAnimator.h"
+#import "platform/cocoa/private/PAGAnimatorListenerProxy.h"
 #import "platform/cocoa/private/PAGLayer+Internal.h"
 #import "platform/cocoa/private/PAGLayerImpl+Internal.h"
 #import "platform/cocoa/private/PixelBufferUtil.h"
@@ -67,12 +68,13 @@ static const float DEFAULT_MAX_FRAMERATE = 30.0;
 
 @end
 
-@interface PAGImageView () <PAGAnimatorUpdater, PAGAnimatorListener>
+@interface PAGImageView () <PAGAnimatorUpdater, PAGViewAnimatorForwarder>
 @end
 
 @implementation PAGImageView {
   NSString* filePath;
   PAGAnimator* animator;
+  PAGAnimatorListenerProxy* animatorListenerProxy;
   std::shared_ptr<pag::PAGComposition> pagComposition;
   std::shared_ptr<pag::PAGDecoder> pagDecoder;
   int64_t duration;
@@ -115,7 +117,8 @@ static const float DEFAULT_MAX_FRAMERATE = 30.0;
   self.backgroundColor = [UIColor clearColor];
   animator = [[PAGAnimator alloc] initWithUpdater:(id<PAGAnimatorUpdater>)self];
   listeners = [[NSHashTable weakObjectsHashTable] retain];
-  [animator addListener:self];
+  animatorListenerProxy = [[PAGAnimatorListenerProxy alloc] initWithForwarder:self];
+  [animator addListener:animatorListenerProxy];
 
   [[NSNotificationCenter defaultCenter] addObserver:self
                                            selector:@selector(applicationDidBecomeActive:)
@@ -134,6 +137,7 @@ static const float DEFAULT_MAX_FRAMERATE = 30.0;
 - (void)dealloc {
   [animator cancel];
   [animator release];
+  [animatorListenerProxy release];
   {
     std::lock_guard<std::mutex> autoLock(imageViewLock);
     [self reset];
@@ -192,6 +196,11 @@ static const float DEFAULT_MAX_FRAMERATE = 30.0;
   }
   self.maxFrameRate = maxFrameRate;
 
+  // The animator keeps a progress that is independent of the composition, so it must be reset to
+  // the new composition's progress when the resource is switched. Otherwise a switch triggered
+  // during playback keeps the previous progress and the new animation starts from the middle.
+  // This matches the behavior of the Android PAGImageView.
+  [animator setProgress:newComposition ? newComposition->getProgress() : 0.0];
   [self reset];
   [self updatePAGDecoder];
   if (self.isVisible) {
@@ -301,11 +310,16 @@ static const float DEFAULT_MAX_FRAMERATE = 30.0;
     return YES;
   }
   [self updatePAGDecoder];
-  if (pagDecoder == nullptr) {
+  // Take a local strong reference as belt-and-suspenders defense: pagDecoder->readFrame() only
+  // borrows the decoder through a raw dereference. The actual serialization is provided by
+  // imageViewLock, which the whole flush path holds and which every writer of pagDecoder also
+  // holds, so this copy simply guarantees the decoder object stays alive for the rest of this call.
+  auto decoder = pagDecoder;
+  if (decoder == nullptr) {
     return false;
   }
-  if (pagDecoder->checkFrameChanged(static_cast<int>(frameIndex))) {
-    BOOL status = pagDecoder->readFrame(static_cast<int>(frameIndex), pixelBuffer);
+  if (decoder->checkFrameChanged(static_cast<int>(frameIndex))) {
+    BOOL status = decoder->readFrame(static_cast<int>(frameIndex), pixelBuffer);
     if (!status) {
       return status;
     }
@@ -375,6 +389,8 @@ static const float DEFAULT_MAX_FRAMERATE = 30.0;
   width = 0;
   height = 0;
   numFrames = 0;
+  self.currentFrameIndex = -1;
+  self.currentUIImage = nil;
 }
 
 - (UIImage*)imageForCVPixelBuffer:(CVPixelBufferRef)pixelBuffer {
@@ -532,27 +548,7 @@ static const float DEFAULT_MAX_FRAMERATE = 30.0;
   [listeners removeObject:listener];
 }
 
-#pragma mark - PAGAnimatorListener
-
-- (void)onAnimationStart:(id<PAGAnimatorUpdater>)updater {
-  [self dispatchListenerEvent:@selector(onAnimationStart:)];
-}
-
-- (void)onAnimationEnd:(id<PAGAnimatorUpdater>)updater {
-  [self dispatchListenerEvent:@selector(onAnimationEnd:)];
-}
-
-- (void)onAnimationCancel:(id<PAGAnimatorUpdater>)updater {
-  [self dispatchListenerEvent:@selector(onAnimationCancel:)];
-}
-
-- (void)onAnimationRepeat:(id<PAGAnimatorUpdater>)updater {
-  [self dispatchListenerEvent:@selector(onAnimationRepeat:)];
-}
-
-- (void)onAnimationUpdate:(id<PAGAnimatorUpdater>)updater {
-  [self dispatchListenerEvent:@selector(onAnimationUpdate:)];
-}
+#pragma mark - Listener dispatch
 
 - (void)dispatchListenerEvent:(SEL)selector {
   if ([NSThread isMainThread]) {

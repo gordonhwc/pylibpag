@@ -16,12 +16,18 @@
 //
 /////////////////////////////////////////////////////////////////////////////////////////////////
 
+#include <algorithm>
+#include <atomic>
+#include <chrono>
 #include <filesystem>
+#include <thread>
+#include <vector>
 #include "pag/pag.h"
 #include "platform/Platform.h"
 #include "rendering/caches/DiskCache.h"
 #include "rendering/utils/BitmapBuffer.h"
 #include "rendering/utils/Directory.h"
+#include "tgfx/gpu/opengl/GLDevice.h"
 #include "utils/TestUtils.h"
 
 namespace pag {
@@ -352,6 +358,50 @@ PAG_TEST(PAGDiskCacheTest, PAGDecoder) {
   pag::PAGDiskCache::RemoveAll();
 }
 
+/**
+ * Regression test for the iOS dangling GL context crash: after MakeFrom captures the caller's
+ * current GL context, destroying that caller context must not affect subsequent readFrame calls,
+ * even when they happen on another thread. Before the fix, PAGDecoder held a raw pointer to the
+ * caller's context and dereferenced it later in readFrame(), causing a use-after-free once the
+ * caller context was released.
+ */
+static void ReadFirstFrame(PAGDecoder* decoder, bool* success) {
+  tgfx::Bitmap bitmap(decoder->width(), decoder->height(), false, false);
+  tgfx::Pixmap pixmap(bitmap);
+  *success = decoder->readFrame(0, pixmap.writablePixels(), pixmap.rowBytes());
+}
+
+PAG_TEST(PAGDiskCacheTest, PAGDecoderContextDestroyed) {
+  pag::PAGDiskCache::RemoveAll();
+  auto pagFile = LoadPAGFile("resources/apitest/data_bmp.pag");
+  ASSERT_TRUE(pagFile != nullptr);
+
+  // Make a standalone GL context current on this thread so MakeFrom() captures it as the caller
+  // context via GLDevice::CurrentNativeHandle().
+  auto callerDevice = tgfx::GLDevice::Make();
+  ASSERT_TRUE(callerDevice != nullptr);
+  auto callerContext = callerDevice->lockContext();
+  ASSERT_TRUE(callerContext != nullptr);
+  auto decoder = PAGDecoder::MakeFrom(pagFile, 30, 0.5f);
+  ASSERT_TRUE(decoder != nullptr);
+  EXPECT_TRUE(decoder->sharedDevice != nullptr);
+
+  // Destroy the caller's context; a correct decoder no longer depends on its lifetime.
+  callerDevice->unlock();
+  callerDevice = nullptr;
+
+  // Read on another thread with no current GL context: must render through the self-owned
+  // sharedDevice instead of crashing on the freed caller context.
+  bool success = false;
+  std::thread reader(ReadFirstFrame, decoder.get(), &success);
+  reader.join();
+  EXPECT_TRUE(success);
+  EXPECT_TRUE(decoder->reader != nullptr);
+
+  decoder = nullptr;
+  pag::PAGDiskCache::RemoveAll();
+}
+
 PAG_TEST(PAGDiskCacheTest, PAGDecoder_StaticTimeRanges) {
   pag::PAGDiskCache::RemoveAll();
   auto pagFile = LoadPAGFile("resources/apitest/polygon.pag");
@@ -491,6 +541,63 @@ PAG_TEST(PAGDiskCacheTest, DiskIOWorker) {
   }
   worker->waitAll();
   EXPECT_EQ(counter.load(), 100);
+}
+
+/**
+ * Concurrency stress test around issue #3684. It repeatedly creates, uses, and destroys independent
+ * PAGDecoders on multiple threads (each thread owns its own PAGFile and decoder, running the
+ * teardown chain ~PAGDecoder -> ~CompositionReader -> ~PAGPlayer -> ~VideoReader) while the shared
+ * disk cache is cleared concurrently. Note that this does NOT deterministically reproduce the
+ * intra-decoder teardown race: within a single thread the decoder is created, used, and destroyed
+ * sequentially, so a teardown never overlaps an in-flight readFrame() on the same decoder. It
+ * exercises the destructor locking and the shared DiskCache paths under concurrent load, guarding
+ * against regressions of #3684 without pinning down the exact race window.
+ */
+PAG_TEST(PAGDiskCacheTest, PAGDecoderTeardownRace) {
+  pag::PAGDiskCache::RemoveAll();
+  std::vector<std::shared_ptr<PAGFile>> pagFiles;
+  for (int i = 0; i < 4; i++) {
+    auto pagFile = LoadPAGFile("resources/apitest/video_sequence_size.pag");
+    ASSERT_TRUE(pagFile != nullptr);
+    pagFiles.push_back(pagFile);
+  }
+
+  std::atomic<bool> stopped = {false};
+  std::thread cacheCleaner([&] {
+    while (!stopped.load()) {
+      PAGDiskCache::RemoveAll();
+      std::this_thread::sleep_for(std::chrono::milliseconds(5));
+    }
+  });
+
+  std::atomic<int> successFrames = {0};
+  std::vector<std::thread> readers;
+  for (int i = 0; i < 4; i++) {
+    readers.emplace_back([&, i] {
+      for (int round = 0; round < 3; round++) {
+        auto decoder = PAGDecoder::MakeFrom(pagFiles[i], 60, 1.0f);
+        if (decoder == nullptr) {
+          continue;
+        }
+        tgfx::Bitmap bitmap(decoder->width(), decoder->height(), false, false);
+        tgfx::Pixmap pixmap(bitmap);
+        auto frameCount = std::min(decoder->numFrames(), 10);
+        for (int frame = 0; frame < frameCount; frame++) {
+          if (decoder->readFrame(frame, pixmap.writablePixels(), pixmap.rowBytes())) {
+            successFrames++;
+          }
+        }
+      }
+    });
+  }
+  for (auto& reader : readers) {
+    reader.join();
+  }
+  stopped = true;
+  cacheCleaner.join();
+
+  EXPECT_GT(successFrames.load(), 0);
+  pag::PAGDiskCache::RemoveAll();
 }
 
 }  // namespace pag
